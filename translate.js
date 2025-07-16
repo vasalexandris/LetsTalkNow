@@ -1,16 +1,14 @@
+// Δωρεάν Google Translate (web-scraping) – μόνο για δοκιμή
 export async function translate(text) {
   const target = document.getElementById('langSelect').value;
-  const res = await fetch('https://api.openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer YOUR_OPENROUTER_KEY`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'moonshotai/k2',
-      messages: [{ role: 'user', content: `Translate the following text to ${target}:\n${text}` }]
-    })
-  });
+  const url =
+    'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+    target +
+    '&dt=t&q=' +
+    encodeURIComponent(text);
+
+  const res = await fetch(url);
   const data = await res.json();
-  document.getElementById('translatedText').value = data.choices?.[0]?.message?.content?.trim() || '';
+  const translated = data[0]?.map(t => t[0]).join('') || '';
+  document.getElementById('translatedText').value = translated;
 }

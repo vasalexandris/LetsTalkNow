@@ -34,5 +34,19 @@
 
   <script type="module" src="js/speech.js"></script>
   <script type="module" src="js/translate.js"></script>
+<script>
+  window.onload = () => {
+    const btn = document.getElementById('micBtn');
+    if (!btn) {
+      alert('ΔΕΝ ΒΡΗΚΑ ΤΟ ΚΟΥΜΠΙ!');
+      return;
+    }
+    btn.addEventListener('click', () => {
+      alert('Κουμπί πιάστηκε!');
+    });
+  };
+</script>
+
+
 </body>
 </html>

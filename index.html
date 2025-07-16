@@ -36,53 +36,42 @@
 
   <!-- Ενιαίο inline script που πάντα φορτώνει -->
   <script>
-    (function () {
-      const btn = document.getElementById('micBtn');
-      const src = document.getElementById('sourceText');
-      const dst = document.getElementById('translatedText');
-      const sel = document.getElementById('langSelect');
+(function () {
+  const btn = document.getElementById('micBtn');
+  const src = document.getElementById('sourceText');
+  const dst = document.getElementById('translatedText');
+  const sel = document.getElementById('langSelect');
 
-      // Browser support check
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        alert('Το browser σου δεν υποστηρίζει αναγνώριση ομιλίας.');
-        return;
-      }
+  btn.addEventListener('mousedown', () => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => {
+        const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        rec.lang = 'en-US';
+        rec.interimResults = false;
+        rec.onstart = () => btn.style.background = '#ff0000';
+        rec.onresult = (e) => {
+          const txt = e.results[0][0].transcript;
+          src.value = txt;
 
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'en-US';          // δοκιμάζουμε Αγγλικά
-rec.interimResults = false;  // βλέπουμε μόνο το τελικό κείμενο
+          // Free Google translate
+          const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+                      sel.value + '&dt=t&q=' + encodeURIComponent(txt);
+          fetch(url)
+            .then(r => r.json())
+            .then(d => dst.value = d[0]?.map(t => t[0]).join('') || '')
+            .catch(() => dst.value = 'Error translating');
+        };
+        rec.onend = () => btn.style.background = '#00c6ff';
+        rec.start();
+      })
+      .catch(() => alert('Παρακαλώ επιτρέψτε το μικρόφωνο στις ρυθμίσεις του browser σας.'));
+  });
 
-      // Events
-      rec.onstart = () => btn.textContent = '🔴 listening…';
-      rec.onend   = () => btn.textContent = '🎤 Hold & Talk';
-      rec.onresult = (e) => {
-        const txt = e.results[e.results.length - 1][0].transcript;
-        src.value = txt;
-
-        // δωρεάν μετάφραση Google
-        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
-                    sel.value + '&dt=t&q=' + encodeURIComponent(txt);
-        fetch(url)
-          .then(r => r.json())
-          .then(d => dst.value = d[0]?.map(t => t[0]).join('') || '')
-          .catch(() => dst.value = 'Σφάλμα μετάφρασης');
-      };
-
-      // Hold button
-      btn.addEventListener('mousedown', () => {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(() => rec.start())
-          .catch(() => alert('Δώστε άδεια για μικρόφωνο'));
-      });
-
-      btn.addEventListener('mouseup', () => rec.stop());
-      btn.addEventListener('touchstart', (e) => { e.preventDefault(); btn.dispatchEvent(new Event('mousedown')); });
-      btn.addEventListener('touchend',   (e) => { e.preventDefault(); btn.dispatchEvent(new Event('mouseup')); });
-    })();
-  </script>
+  btn.addEventListener('mouseup', () => {
+    btn.style.background = '#00c6ff';
+  });
+})();
+</script>
   
 </body>
 </html>

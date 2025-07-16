@@ -52,7 +52,8 @@
       const rec = new SpeechRecognition();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = 'el-GR'; // δοκίμασε και 'en-US'
+      rec.lang = 'en-US';          // δοκιμάζουμε Αγγλικά
+rec.interimResults = false;  // βλέπουμε μόνο το τελικό κείμενο
 
       // Events
       rec.onstart = () => btn.textContent = '🔴 listening…';

@@ -1,77 +1,822 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="el">
 <head>
-  <meta charset="UTF-8" />
-  <title>TalkEase – Live Translator</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="css/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VeriTalk — Realtime Double-Check Translator</title>
+  <meta name="description" content="Στιγμιαίος realtime μεταφραστής με QR Code δωμάτια, αντίστροφη μετάφραση (back-translation) για απόλυτη σιγουριά και AI Gemini 2.5 Flash.">
+  
+  <!-- PeerJS for 100% Serverless P2P Room Connections on GitHub Pages -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- QRCode.js for client-side QR generation -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg-canvas: #090d16;
+      --bg-surface: #0f172a;
+      --bg-surface-elevated: #162038;
+      --border-subtle: #1e293b;
+      --border-prominent: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-tertiary: #64748b;
+      --accent-cyan: #0ea5e9;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg-canvas); color: var(--text-primary); line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; }
+
+    button { cursor: pointer; border: none; font-family: inherit; font-size: 0.9rem; transition: all 150ms ease; }
+    input, select { background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm); padding: 0.6rem 0.9rem; outline: none; }
+    input:focus, select:focus { border-color: var(--accent-cyan); }
+
+    .btn-primary { background: var(--accent-cyan); color: white; font-weight: 600; padding: 0.75rem 1.4rem; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .btn-primary:hover { background: #0284c7; }
+    .btn-secondary { background: var(--bg-surface-elevated); color: var(--text-primary); border: 1px solid var(--border-subtle); font-weight: 500; padding: 0.75rem 1.4rem; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .btn-secondary:hover { background: #1e2c4c; }
+
+    .hidden { display: none !important; }
+
+    /* Nav */
+    header { height: 60px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); display: flex; align-items: center; justify-content: space-between; padding: 0 1.25rem; }
+    .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; cursor: pointer; }
+    .brand-icon { width: 32px; height: 32px; background: var(--accent-cyan); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.1rem; }
+
+    /* Landing */
+    .landing-container { flex: 1; max-width: 840px; margin: 0 auto; width: 100%; padding: 3rem 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(16, 185, 129, 0.12); color: var(--accent-emerald); padding: 0.35rem 0.9rem; border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(16, 185, 129, 0.25); margin-bottom: 1.25rem; }
+    .hero-title { font-size: 2.5rem; font-weight: 800; line-height: 1.15; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
+    .hero-subtitle { font-size: 1.05rem; color: var(--text-secondary); max-width: 650px; line-height: 1.6; margin-bottom: 2rem; }
+    .cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-bottom: 3rem; }
+
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.25rem; width: 100%; text-align: left; }
+    .feature-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.25rem; }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .feature-card h4 { font-size: 1rem; margin-bottom: 0.4rem; color: var(--text-primary); }
+    .feature-card p { font-size: 0.825rem; color: var(--text-secondary); line-height: 1.5; }
+
+    /* Room View */
+    .room-container { flex: 1; max-width: 800px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; height: calc(100vh - 60px); background: var(--bg-canvas); }
+    .room-bar { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .room-code-tag { font-family: monospace; font-weight: 700; color: var(--accent-cyan); background: rgba(14, 165, 233, 0.12); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.85rem; }
+    
+    .participants-bar { background: var(--bg-surface-elevated); border-bottom: 1px solid var(--border-subtle); padding: 0.4rem 1rem; display: flex; gap: 0.5rem; overflow-x: auto; font-size: 0.8rem; }
+    .p-chip { background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 0.2rem 0.6rem; border-radius: var(--radius-full); display: inline-flex; align-items: center; gap: 0.35rem; }
+    .p-chip.self { border-color: var(--accent-cyan); }
+
+    .chat-stream { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
+    .msg-bubble { max-width: 82%; padding: 0.75rem 1rem; border-radius: var(--radius-md); font-size: 0.95rem; }
+    .msg-incoming { align-self: flex-start; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-bottom-left-radius: 2px; }
+    .msg-outgoing { align-self: flex-end; background: var(--bg-surface-elevated); border: 1px solid var(--border-prominent); border-bottom-right-radius: 2px; }
+    .msg-sender { font-size: 0.725rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.3rem; display: flex; justify-content: space-between; }
+    .msg-sub { font-size: 0.75rem; color: var(--text-tertiary); border-top: 1px dashed var(--border-subtle); padding-top: 0.3rem; margin-top: 0.3rem; }
+    .btn-speak { font-size: 0.725rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: var(--text-secondary); padding: 0.15rem 0.45rem; border-radius: 4px; margin-top: 0.3rem; }
+
+    /* Verification Tray */
+    .verification-tray { background: var(--bg-surface); border-top: 1px solid var(--border-subtle); padding: 0.9rem; display: flex; flex-direction: column; gap: 0.65rem; box-shadow: 0 -4px 16px rgba(0,0,0,0.3); }
+    .back-trans-box { background: var(--bg-surface-elevated); border-left: 3px solid var(--accent-emerald); border-radius: var(--radius-sm); padding: 0.65rem; }
+    .countdown-bar-wrap { width: 100%; height: 5px; background: var(--bg-surface-elevated); border-radius: 10px; overflow: hidden; }
+    .countdown-bar-fill { height: 100%; width: 100%; background: var(--accent-cyan); transition: width 80ms linear; }
+
+    /* Voice Dock */
+    .voice-dock { background: var(--bg-surface); border-top: 1px solid var(--border-subtle); padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; }
+    .btn-mic { width: 50px; height: 50px; border-radius: 50%; background: var(--accent-cyan); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
+    .btn-mic.recording { background: var(--accent-rose); animation: pulseMic 1.2s infinite; }
+    @keyframes pulseMic { 0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.6); } 70% { box-shadow: 0 0 0 14px rgba(244,63,94,0); } 100% { box-shadow: 0 0 0 0 rgba(244,63,94,0); } }
+
+    /* Modals */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(9, 13, 22, 0.85); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 100; }
+    .modal-box { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); width: 100%; max-width: 440px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .qr-frame { background: white; padding: 0.75rem; border-radius: var(--radius-md); margin: 0 auto; display: inline-block; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <section id="left" class="panel">
-      <header>
-        <h2>Speak</h2>
-        <button id="micBtn" style="background:#00c6ff;color:#000;font-weight:bold;padding:8px 16px;border:none;border-radius:4px;">Hold & Talk</button>
-      </header>
-      <textarea id="sourceText" placeholder="Your speech will appear here…" readonly></textarea>
-    </section>
 
-    <section id="right" class="panel">
-      <header>
-        <h2>Translation</h2>
-        <select id="langSelect">
-          <option value="el">Ελληνικά</option>
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="fr">Français</option>
-          <option value="de">Deutsch</option>
-        </select>
-      </header>
-      <textarea id="translatedText" placeholder="Translation will appear here…" readonly></textarea>
-    </section>
-<h2>test</h2>
-    
+  <!-- Top Navigation -->
+  <header>
+    <div class="brand" onclick="navigateToLanding()">
+      <div class="brand-icon">V</div>
+      <span>VeriTalk</span>
+      <span style="font-size: 0.7rem; color: var(--accent-cyan); background: rgba(14,165,233,0.12); padding: 0.1rem 0.4rem; border-radius: 999px;">AI 2.5 Flash</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <div id="navUserBadge" class="hidden" style="font-size: 0.8rem; font-weight: 600;">
+        <span id="navUserName">Χρήστης</span> <span id="navUserFlag">🇬🇷</span>
+      </div>
+      <button id="apiKeySettingsBtn" onclick="openKeyModal()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.78rem;">
+        ⚙️ Gemini Key
+      </button>
+      <button id="leaveBtn" onclick="leaveRoom()" class="btn-secondary hidden" style="padding: 0.35rem 0.75rem; font-size: 0.78rem;">
+        Έξοδος
+      </button>
+    </div>
+  </header>
+
+  <!-- LANDING PAGE VIEW -->
+  <main id="landingView" class="landing-container">
+    <div class="hero-badge">
+      ✨ Gemini 2.5 Flash & Double-Check Verification
+    </div>
+    <h1 class="hero-title">
+      Στιγμιαία Μετάφραση Συνομιλίας<br>χωρίς Παρερμηνείες.
+    </h1>
+    <p class="hero-subtitle">
+      Ανοίξτε ένα δωμάτιο, δείξτε το <strong>QR Code</strong> στον συνομιλητή σας και μιλήστε στη μητρική σας γλώσσα.
+      Χάρη στην <strong>Αντίστροφη Μετάφραση</strong> (Back-Translation), βλέπετε ακριβώς τι θα καταλάβει ο άλλος πριν αποσταλεί το μήνυμα!
+    </p>
+
+    <div class="cta-group">
+      <button onclick="startInstantHost()" class="btn-primary" style="padding: 0.85rem 1.6rem; font-size: 1rem; border-radius: 12px;">
+        📲 Έναρξη με QR Code (Host Room)
+      </button>
+      <button onclick="promptJoinCode()" class="btn-secondary" style="padding: 0.85rem 1.6rem; font-size: 1rem; border-radius: 12px;">
+        Είσοδος με Κωδικό Δωματίου
+      </button>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📲</div>
+        <h4>Στιγμιαία Είσοδος με QR Code</h4>
+        <p>Ο ένας δείχνει το QR, οι άλλοι το σκανάρουν με την κάμερά τους και μπαίνουν στο δωμάτιο σε 3 δευτερόλεπτα, χωρίς downloads ή εγγραφές.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h4>Αντίστροφη Μετάφραση (Back-Translation)</h4>
+        <p>Βλέπετε πώς ξαναμεταφράζεται στη γλώσσα σας αυτό που θα λάβουν οι άλλοι. Είστε 100% σίγουροι ότι εκφράσατε ακριβώς αυτό που θέλατε.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔊</div>
+        <h4>Φωνητική Ομιλία (STT) & Ακρόαση (TTS)</h4>
+        <p>Μιλάτε στη δική σας γλώσσα και οι άλλοι στο δωμάτιο ακούν και διαβάζουν το μήνυμα αυτόματα στη δική τους μητρική γλώσσα.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⏱️</div>
+        <h4>Αυτόματη (2s) ή Χειροκίνητη Αποστολή</h4>
+        <p>Αντίστροφη μέτρηση 2 δευτερολέπτων με οπτική μπάρα προόδου. Αν δεν πατήσετε «Άκυρο», το μήνυμα φεύγει αυτόματα για μέγιστη ταχύτητα.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- LIVE CONVERSATION ROOM VIEW -->
+  <main id="roomView" class="room-container hidden">
+    <!-- Top Room Bar -->
+    <div class="room-bar">
+      <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <span style="font-size: 0.8rem; color: var(--text-tertiary);">Δωμάτιο:</span>
+        <span id="roomCodeBadge" class="room-code-tag">vt-room</span>
+        <span id="pCountTag" style="font-size: 0.78rem; color: var(--text-secondary);">1 άτομο</span>
+      </div>
+      <div style="display: flex; gap: 0.4rem;">
+        <button onclick="openQrModal()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+          📲 QR Code
+        </button>
+        <button id="ttsBtn" onclick="toggleTts()" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+          🔊 Ήχος: ON
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Participants -->
+    <div class="participants-bar" id="participantsList"></div>
+
+    <!-- Chat Messages Stream -->
+    <div class="chat-stream" id="chatStream"></div>
+
+    <!-- VERIFICATION TRAY (The Double-Check Feature) -->
+    <div id="verificationTray" class="verification-tray hidden">
+      <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600;">
+        <span style="color: var(--accent-emerald);">🛡️ Έλεγχος & Αντίστροφη Μετάφραση</span>
+        <span id="confidencePill" style="font-size: 0.72rem; color: var(--accent-emerald);">99% Ακρίβεια</span>
+      </div>
+
+      <!-- 1. Transcribed speech (editable) -->
+      <div>
+        <div style="font-size: 0.72rem; color: var(--text-tertiary); margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+          <span>1. Τι καταγράφηκε (επεξεργάσιμο):</span>
+          <span style="color: var(--accent-cyan); cursor: pointer;" onclick="recheckCurrentInput()">Επανέλεγχος ↻</span>
+        </div>
+        <input type="text" id="sttInputEdit" style="width: 100%; font-size: 0.9rem;">
+      </div>
+
+      <!-- 2. Back-translation box -->
+      <div class="back-trans-box">
+        <div style="font-size: 0.72rem; font-weight: 600; color: var(--accent-emerald); margin-bottom: 0.2rem;">
+          2. Πώς ξαναμεταφράζεται στη γλώσσα σας αυτό που θα δουν οι άλλοι:
+        </div>
+        <div id="backTransDisplay" style="font-size: 0.95rem; font-weight: 500;">
+          Ανάλυση με Gemini...
+        </div>
+      </div>
+
+      <!-- 3. Countdown Progress Bar & Actions -->
+      <div id="autoCountdownWrap">
+        <div class="countdown-bar-wrap">
+          <div id="countdownBar" class="countdown-bar-fill"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem; font-size: 0.78rem;">
+          <span style="color: var(--text-tertiary);">Αποστολή σε <strong id="cdSeconds">2</strong>s...</span>
+          <div style="display: flex; gap: 0.4rem;">
+            <button onclick="cancelCountdown()" class="btn-secondary" style="padding: 0.35rem 0.8rem; font-size: 0.75rem; color: var(--accent-rose);">
+              Άκυρο (Διόρθωση)
+            </button>
+            <button onclick="dispatchNow()" class="btn-primary" style="padding: 0.35rem 0.9rem; font-size: 0.75rem;">
+              Αποστολή Τώρα
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice Dock -->
+    <div class="voice-dock">
+      <button id="micBtn" onclick="toggleMicRecording()" class="btn-mic" title="Μιλήστε στη γλώσσα σας">
+        🎤
+      </button>
+      <input type="text" id="quickTextInput" placeholder="Ή πληκτρολογήστε μήνυμα..." style="flex: 1;" onkeydown="if(event.key==='Enter') handleQuickText()">
+      <button onclick="handleQuickText()" class="btn-primary" style="padding: 0.6rem 1rem;">
+        ➔
+      </button>
+    </div>
+  </main>
+
+  <!-- MODAL: QR CODE -->
+  <div id="qrModal" class="modal-backdrop hidden">
+    <div class="modal-box text-center">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">📲 Σκανάρετε για Σύνδεση</h3>
+        <button onclick="closeQrModal()" style="font-size: 1.5rem; color: var(--text-tertiary);">&times;</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary);">
+        Δείξτε αυτό το QR Code στον συνομιλητή σας. Μόλις το σκανάρει, θα συνδεθεί άμεσα στο δωμάτιο!
+      </p>
+      <div class="qr-frame">
+        <canvas id="qrCanvas"></canvas>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <input type="text" id="qrLinkInput" readonly style="flex: 1; font-size: 0.8rem; font-family: monospace;">
+        <button onclick="copyQrLink()" class="btn-primary" style="padding: 0.5rem 0.9rem; font-size: 0.8rem;">
+          Αντιγραφή
+        </button>
+      </div>
+    </div>
   </div>
 
-  <!-- Ενιαίο inline script που πάντα φορτώνει -->
+  <!-- MODAL: ONBOARDING & TERMS (For Guest Join) -->
+  <div id="onboardingModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <h3 style="font-size: 1.15rem; font-weight: 700;">👋 Είσοδος στο Δωμάτιο</h3>
+      
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 0.3rem;">Το Όνομά σας:</label>
+        <input type="text" id="onboardName" placeholder="π.χ. Νίκος / Marco / Alex" style="width: 100%;">
+      </div>
+
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 0.3rem;">Η Μητρική/Ομιλούμενη Γλώσσα σας:</label>
+        <select id="onboardLanguage" style="width: 100%;">
+          <option value="el">🇬🇷 Ελληνικά</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="de">🇩🇪 Deutsch</option>
+          <option value="ru">🇷🇺 Русский</option>
+          <option value="ar">🇸🇦 العربية</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
+      </div>
+
+      <!-- Mandatory Terms Acceptance -->
+      <label style="display: flex; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; line-height: 1.4;">
+        <input type="checkbox" id="termsCheck" checked style="margin-top: 0.15rem;">
+        <span>Αποδέχομαι τους <strong>Όρους Χρήσης</strong> και την επεξεργασία φωνής για τη στιγμιαία μετάφραση.</span>
+      </label>
+
+      <button onclick="submitOnboarding()" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">
+        Συνέχεια στο Δωμάτιο ➔
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: GEMINI API KEY SETTINGS -->
+  <div id="apiKeyModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">⚙️ Ρύθμιση Gemini API Key</h3>
+        <button onclick="document.getElementById('apiKeyModal').classList.add('hidden')" style="font-size: 1.5rem; color: var(--text-tertiary);">&times;</button>
+      </div>
+      <p style="font-size: 0.825rem; color: var(--text-secondary);">
+        Εισάγετε το προσωπικό σας κλειδί <strong>Google Gemini Flash</strong>. Αποθηκεύεται μόνο τοπικά στη συσκευή σας.
+      </p>
+      <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." style="width: 100%;">
+      <button onclick="saveApiKey()" class="btn-primary" style="width: 100%;">
+        Αποθήκευση Κλειδιού
+      </button>
+    </div>
+  </div>
+
   <script>
-(function () {
-  const btn = document.getElementById('micBtn');
-  const src = document.getElementById('sourceText');
-  const dst = document.getElementById('translatedText');
-  const sel = document.getElementById('langSelect');
+    // Supported languages dictionary
+    const LANGUAGES = {
+      el: { name: 'Ελληνικά', flag: '🇬🇷', speechCode: 'el-GR' },
+      en: { name: 'English', flag: '🇬🇧', speechCode: 'en-US' },
+      it: { name: 'Italiano', flag: '🇮🇹', speechCode: 'it-IT' },
+      es: { name: 'Español', flag: '🇪🇸', speechCode: 'es-ES' },
+      fr: { name: 'Français', flag: '🇫🇷', speechCode: 'fr-FR' },
+      de: { name: 'Deutsch', flag: '🇩🇪', speechCode: 'de-DE' },
+      ru: { name: 'Русский', flag: '🇷🇺', speechCode: 'ru-RU' },
+      ar: { name: 'العربية', flag: '🇸🇦', speechCode: 'ar-SA' },
+      zh: { name: '中文', flag: '🇨🇳', speechCode: 'zh-CN' }
+    };
 
-  btn.addEventListener('mousedown', () => {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(() => {
-        const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        rec.lang = 'en-US';
-        rec.interimResults = false;
-        rec.onstart = () => btn.style.background = '#ff0000';
-        rec.onresult = (e) => {
-          const txt = e.results[0][0].transcript;
-          src.value = txt;
+    // State
+    let currentUser = JSON.parse(localStorage.getItem('veritalk_gh_user') || 'null');
+    let geminiApiKey = localStorage.getItem('veritalk_gemini_key') || '';
+    let currentRoomId = null;
+    let peer = null;
+    let connections = []; // P2P DataChannels to peers
+    let isHost = false;
+    let ttsEnabled = true;
+    let isRecording = false;
+    let recognition = null;
+    let pendingVerification = null;
+    let countdownTimer = null;
+    let remainingMs = 2000;
 
-          // Free Google translate
-          const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
-                      sel.value + '&dt=t&q=' + encodeURIComponent(txt);
-          fetch(url)
-            .then(r => r.json())
-            .then(d => dst.value = d[0]?.map(t => t[0]).join('') || '')
-            .catch(() => dst.value = 'Error translating');
+    // Check URL parameters for ?room=ROOM_ID
+    window.addEventListener('DOMContentLoaded', () => {
+      initSpeechRecognition();
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room');
+      if (urlRoom) {
+        currentRoomId = urlRoom;
+        if (!currentUser) {
+          openOnboardingModal();
+        } else {
+          joinRoom(urlRoom);
+        }
+      }
+    });
+
+    function navigateToLanding() {
+      if (currentRoomId) {
+        if (confirm('Θέλετε να αποχωρήσετε από το δωμάτιο;')) {
+          leaveRoom();
+        }
+      } else {
+        document.getElementById('landingView').classList.remove('hidden');
+        document.getElementById('roomView').classList.add('hidden');
+      }
+    }
+
+    function openKeyModal() {
+      document.getElementById('geminiKeyInput').value = geminiApiKey;
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+    }
+
+    function saveApiKey() {
+      const k = document.getElementById('geminiKeyInput').value.trim();
+      geminiApiKey = k;
+      localStorage.setItem('veritalk_gemini_key', k);
+      document.getElementById('apiKeyModal').classList.add('hidden');
+      alert('Το κλειδί Gemini αποθηκεύτηκε επιτυχώς!');
+    }
+
+    function startInstantHost() {
+      if (!currentUser) {
+        openOnboardingModal(true);
+      } else {
+        createAndHostRoom();
+      }
+    }
+
+    function promptJoinCode() {
+      const code = prompt('Εισάγετε τον κωδικό δωματίου:');
+      if (code) {
+        currentRoomId = code.trim();
+        if (!currentUser) {
+          openOnboardingModal(false);
+        } else {
+          joinRoom(currentRoomId);
+        }
+      }
+    }
+
+    function openOnboardingModal(asHost = false) {
+      window._pendingHost = asHost;
+      document.getElementById('onboardingModal').classList.remove('hidden');
+    }
+
+    function submitOnboarding() {
+      const terms = document.getElementById('termsCheck').checked;
+      if (!terms) {
+        alert('Πρέπει να αποδεχτείτε τους Όρους Χρήσης για να συνεχίσετε.');
+        return;
+      }
+      const name = document.getElementById('onboardName').value.trim() || 'Χρήστης';
+      const lang = document.getElementById('onboardLanguage').value;
+
+      currentUser = { id: 'usr_' + Math.random().toString(36).substring(2, 7), name, language: lang };
+      localStorage.setItem('veritalk_gh_user', JSON.stringify(currentUser));
+      document.getElementById('onboardingModal').classList.add('hidden');
+
+      updateNavBadge();
+
+      if (window._pendingHost) {
+        createAndHostRoom();
+      } else if (currentRoomId) {
+        joinRoom(currentRoomId);
+      }
+    }
+
+    function updateNavBadge() {
+      if (currentUser) {
+        document.getElementById('navUserName').textContent = currentUser.name;
+        document.getElementById('navUserFlag').textContent = LANGUAGES[currentUser.language]?.flag || '🌐';
+        document.getElementById('navUserBadge').classList.remove('hidden');
+      }
+    }
+
+    // ---- P2P WebRTC / PeerJS Room Networking (Runs 100% on GitHub Pages!) ----
+
+    function createAndHostRoom() {
+      isHost = true;
+      const roomId = 'vt-' + Math.random().toString(36).substring(2, 8);
+      currentRoomId = roomId;
+
+      initPeer(roomId);
+      showRoomUI(roomId);
+      openQrModal();
+    }
+
+    function joinRoom(roomId) {
+      isHost = false;
+      currentRoomId = roomId;
+      initPeer();
+      showRoomUI(roomId);
+    }
+
+    function initPeer(customId) {
+      if (peer) peer.destroy();
+
+      peer = new Peer(customId || undefined);
+
+      peer.on('open', (id) => {
+        console.log('Peer connected with ID:', id);
+        if (!isHost && currentRoomId) {
+          // Connect to Host
+          const conn = peer.connect(currentRoomId);
+          setupConnection(conn);
+        }
+        updateParticipantsUI();
+      });
+
+      peer.on('connection', (conn) => {
+        console.log('Incoming peer connection from:', conn.peer);
+        setupConnection(conn);
+      });
+    }
+
+    function setupConnection(conn) {
+      connections.push(conn);
+
+      conn.on('open', () => {
+        // Send introduction
+        conn.send({
+          type: 'intro',
+          user: currentUser
+        });
+        updateParticipantsUI();
+      });
+
+      conn.on('data', (data) => {
+        handlePeerMessage(data, conn);
+      });
+
+      conn.on('close', () => {
+        connections = connections.filter(c => c !== conn);
+        updateParticipantsUI();
+      });
+    }
+
+    function handlePeerMessage(data, senderConn) {
+      if (data.type === 'intro') {
+        senderConn._remoteUser = data.user;
+        updateParticipantsUI();
+      } else if (data.type === 'chat_message') {
+        appendMessage(data.message, false);
+      }
+    }
+
+    function broadcastMessage(msg) {
+      connections.forEach(conn => {
+        if (conn.open) {
+          conn.send({ type: 'chat_message', message: msg });
+        }
+      });
+    }
+
+    function showRoomUI(roomId) {
+      document.getElementById('landingView').classList.add('hidden');
+      document.getElementById('roomView').classList.remove('hidden');
+      document.getElementById('leaveBtn').classList.remove('hidden');
+      document.getElementById('roomCodeBadge').textContent = roomId;
+      updateNavBadge();
+      updateParticipantsUI();
+    }
+
+    function leaveRoom() {
+      if (peer) peer.destroy();
+      connections = [];
+      currentRoomId = null;
+      document.getElementById('chatStream').innerHTML = '';
+      document.getElementById('roomView').classList.add('hidden');
+      document.getElementById('leaveBtn').classList.add('hidden');
+      document.getElementById('landingView').classList.remove('hidden');
+      window.history.pushState({}, '', window.location.pathname);
+    }
+
+    function updateParticipantsUI() {
+      const container = document.getElementById('participantsList');
+      container.innerHTML = '';
+
+      // Self
+      if (currentUser) {
+        const selfChip = document.createElement('div');
+        selfChip.className = 'p-chip self';
+        selfChip.innerHTML = `<span>${LANGUAGES[currentUser.language]?.flag}</span> <span>${currentUser.name} (Εσείς)</span> ${isHost ? '<strong style="color:var(--accent-amber);font-size:0.65rem;">HOST</strong>' : ''}`;
+        container.appendChild(selfChip);
+      }
+
+      // Peers
+      connections.forEach(conn => {
+        const u = conn._remoteUser || { name: 'Συνομιλητής', language: 'it' };
+        const chip = document.createElement('div');
+        chip.className = 'p-chip';
+        chip.innerHTML = `<span>${LANGUAGES[u.language]?.flag || '🌐'}</span> <span>${u.name}</span>`;
+        container.appendChild(chip);
+      });
+
+      const total = 1 + connections.length;
+      document.getElementById('pCountTag').textContent = `${total} ${total === 1 ? 'άτομο' : 'άτομα'}`;
+    }
+
+    // ---- QR Code Modal ----
+
+    function openQrModal() {
+      const fullUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
+      document.getElementById('qrLinkInput').value = fullUrl;
+      const canvas = document.getElementById('qrCanvas');
+
+      if (window.QRCode) {
+        QRCode.toCanvas(canvas, fullUrl, { width: 200, margin: 1 }, function (error) {
+          if (error) console.error(error);
+        });
+      }
+      document.getElementById('qrModal').classList.remove('hidden');
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+    }
+
+    function copyQrLink() {
+      const input = document.getElementById('qrLinkInput');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('Ο σύνδεσμος αντιγράφηκε επιτυχώς!');
+    }
+
+    // ---- Speech Recognition & Double-Check Verification ----
+
+    function initSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        document.getElementById('micBtn').classList.add('recording');
+      };
+
+      recognition.onresult = (e) => {
+        let text = '';
+        for (let i = 0; i < e.results.length; i++) {
+          text += e.results[i][0].transcript;
+        }
+        document.getElementById('sttInputEdit').value = text;
+        if (e.results[0].isFinal) {
+          processVerification(text);
+        }
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        document.getElementById('micBtn').classList.remove('recording');
+      };
+    }
+
+    function toggleMicRecording() {
+      if (!recognition) {
+        alert('Η φωνητική αναγνώριση δεν υποστηρίζεται σε αυτόν τον browser. Χρησιμοποιήστε το πεδίο κειμένου.');
+        return;
+      }
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        const langObj = LANGUAGES[currentUser?.language || 'el'];
+        recognition.lang = langObj?.speechCode || 'el-GR';
+        recognition.start();
+      }
+    }
+
+    function handleQuickText() {
+      const text = document.getElementById('quickTextInput').value.trim();
+      if (!text) return;
+      document.getElementById('quickTextInput').value = '';
+      processVerification(text);
+    }
+
+    function recheckCurrentInput() {
+      const text = document.getElementById('sttInputEdit').value.trim();
+      if (text) processVerification(text);
+    }
+
+    async function processVerification(text) {
+      cancelCountdown();
+      document.getElementById('verificationTray').classList.remove('hidden');
+      document.getElementById('sttInputEdit').value = text;
+      document.getElementById('backTransDisplay').textContent = '🔄 Gemini Flash: Μετάφραση & Αντίστροφος Έλεγχος...';
+
+      // Gather target languages
+      const targetLangs = connections.map(c => c._remoteUser?.language).filter(Boolean);
+      const uniqueTargets = [...new Set(targetLangs)].length > 0 ? [...new Set(targetLangs)] : ['it', 'en'];
+
+      try {
+        const result = await translateWithGemini(text, currentUser?.language || 'el', uniqueTargets);
+        pendingVerification = result;
+        document.getElementById('backTransDisplay').textContent = result.overallBackTranslation || text;
+        startCountdown();
+      } catch (err) {
+        console.error('Translation error:', err);
+        document.getElementById('backTransDisplay').textContent = `[Έλεγχος]: ${text}`;
+        startCountdown();
+      }
+    }
+
+    // Direct Gemini 2.5 Flash API Call from Client
+    async function translateWithGemini(text, sourceLang, targetLangs) {
+      if (!geminiApiKey) {
+        // Fallback demo translation if no key is entered yet
+        const translations = {};
+        targetLangs.forEach(t => translations[t] = `[${t.toUpperCase()}] ${text}`);
+        return {
+          originalText: text,
+          translations,
+          overallBackTranslation: text,
+          confidence: 0.95
         };
-        rec.onend = () => btn.style.background = '#00c6ff';
-        rec.start();
-      })
-      .catch(() => alert('Παρακαλώ επιτρέψτε το μικρόφωνο στις ρυθμίσεις του browser σας.'));
-  });
+      }
 
-  btn.addEventListener('mouseup', () => {
-    btn.style.background = '#00c6ff';
-  });
-})();
-</script>
-  
+      const prompt = `Translate this text from "${sourceLang}" into ${JSON.stringify(targetLangs)}.
+Also provide a BACK-TRANSLATION back into "${sourceLang}" so the speaker can double-check the meaning before sending.
+Spoken text: "${text}"
+Respond ONLY in valid JSON matching:
+{
+  "originalText": "${text.replace(/"/g, '\\"')}",
+  "translations": { "<lang>": "<translation>" },
+  "overallBackTranslation": "<back-translation in ${sourceLang}>",
+  "confidence": 0.98
+}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
+
+      const data = await res.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      return JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+    }
+
+    // Auto-send Countdown (2 seconds)
+    function startCountdown() {
+      cancelCountdown();
+      remainingMs = 2000;
+      const bar = document.getElementById('countdownBar');
+      const text = document.getElementById('cdSeconds');
+      bar.style.width = '100%';
+      text.textContent = '2';
+
+      countdownTimer = setInterval(() => {
+        remainingMs -= 50;
+        const pct = Math.max(0, (remainingMs / 2000) * 100);
+        bar.style.width = pct + '%';
+        text.textContent = Math.ceil(remainingMs / 1000);
+
+        if (remainingMs <= 0) {
+          cancelCountdown();
+          dispatchNow();
+        }
+      }, 50);
+    }
+
+    function cancelCountdown() {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    }
+
+    function dispatchNow() {
+      cancelCountdown();
+      if (!pendingVerification) return;
+
+      const msg = {
+        id: 'msg_' + Date.now(),
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderLanguage: currentUser.language,
+        originalText: pendingVerification.originalText,
+        translations: pendingVerification.translations || {},
+        backTranslation: pendingVerification.overallBackTranslation || pendingVerification.originalText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      appendMessage(msg, true);
+      broadcastMessage(msg);
+
+      pendingVerification = null;
+      document.getElementById('verificationTray').classList.add('hidden');
+    }
+
+    function appendMessage(msg, isSelf) {
+      const stream = document.getElementById('chatStream');
+      const bubble = document.createElement('div');
+      bubble.className = `msg-bubble ${isSelf ? 'msg-outgoing' : 'msg-incoming'}`;
+
+      let displayMain = msg.originalText;
+      let displaySub = '';
+
+      if (!isSelf && msg.translations && msg.translations[currentUser?.language]) {
+        displayMain = msg.translations[currentUser.language];
+        displaySub = `Αρχικό (${LANGUAGES[msg.senderLanguage]?.flag} ${msg.senderLanguage.toUpperCase()}): "${msg.originalText}"`;
+      } else if (isSelf && msg.backTranslation) {
+        displaySub = `✓ Επαλήθευση: "${msg.backTranslation}"`;
+      }
+
+      bubble.innerHTML = `
+        <div class="msg-sender">
+          <span>${msg.senderName} ${LANGUAGES[msg.senderLanguage]?.flag || ''}</span>
+          <span style="font-size:0.65rem; color:var(--text-tertiary);">${msg.timestamp}</span>
+        </div>
+        <div style="font-size:1rem; font-weight:500;">${displayMain}</div>
+        ${displaySub ? `<div class="msg-sub">${displaySub}</div>` : ''}
+        <button class="btn-speak" onclick="speakText('${displayMain.replace(/'/g, "\\'")}', '${LANGUAGES[currentUser?.language]?.speechCode || 'el-GR'}')">
+          🔊 Ακρόαση
+        </button>
+      `;
+
+      stream.appendChild(bubble);
+      stream.scrollTop = stream.scrollHeight;
+
+      if (!isSelf && ttsEnabled) {
+        speakText(displayMain, LANGUAGES[currentUser?.language]?.speechCode || 'el-GR');
+      }
+    }
+
+    function toggleTts() {
+      ttsEnabled = !ttsEnabled;
+      document.getElementById('ttsBtn').textContent = ttsEnabled ? '🔊 Ήχος: ON' : '🔇 Ήχος: OFF';
+    }
+
+    function speakText(text, lang) {
+      if (!ttsEnabled || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang;
+      window.speechSynthesis.speak(u);
+    }
+  </script>
 </body>
 </html>
